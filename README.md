@@ -80,7 +80,6 @@ The `uv run` command ensures the script runs in the virtual environment with all
 2. Add a tag in the "Tag" field to categorize your session
 3. Click the "Start" button to begin the focus session
 4. When the timer ends, an alarm will sound and you'll be prompted to enter notes about what you accomplished. You can change the alarm sound by changing the alarm.wav. For convenience, it is shipped together with the git repo (small 1 MB file).
-
 5. Your session will be saved to the local SQLite database file named `focus.db` in the same directory as the application.
 
 
