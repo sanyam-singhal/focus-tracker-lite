@@ -1,7 +1,7 @@
 [project]
-name = "tracker"
+name = "focus-tracker-lite"
 version = "0.1.0"
-description = "Add your description here"
+description = "Minimalist productivity focus timer TUI app with local SQLite storage"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
