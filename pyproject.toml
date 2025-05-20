@@ -1,0 +1,10 @@
+[project]
+name = "tracker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "playsound3>=3.2.3",
+    "textual>=3.2.0",
+]
