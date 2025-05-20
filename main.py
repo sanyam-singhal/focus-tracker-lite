@@ -24,8 +24,8 @@ def get_db() -> sqlite3.Connection:
 
 class FocusApp(App):
     CSS = """
-    #inputs Input#minutes { width: 10; }
-    #inputs Input#tag     { width: 25; }
+    #inputs Input#minutes { width: 15; }
+    #inputs Input#tag     { width: 20; }
     #inputs Button#start  { width: 10; }
     #inputs Button#quit   { width: 8; }  
     #timer { height: 1; content-align: center middle; }
@@ -36,7 +36,7 @@ class FocusApp(App):
         yield Static("⏱  Focus Tracker – Ctrl-Q quits", id="title")
         with Horizontal(id="inputs"):
             yield Input(placeholder="Minutes", id="minutes", type="integer")
-            yield Input(placeholder="Tag (optional)", id="tag")
+            yield Input(placeholder="Tag", id="tag")
             yield Button("Start", id="start", variant="success")
             yield Button("Quit", id="quit", variant="error") 
 

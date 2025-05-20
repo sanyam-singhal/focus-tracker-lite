@@ -2,6 +2,8 @@
 
 A minimalist focus timer TUI (Text User Interface) app with local SQLite storage for tracking your productive sessions.
 
+![Focus Tracker Preview](preview.png)
+
 ## Overview
 
 Focus Tracker Lite helps you implement time-boxing and focus sessions by providing a simple timer with session tracking. The application stores your focus sessions in a local SQLite database, allowing you to keep a record of your productivity over time.
