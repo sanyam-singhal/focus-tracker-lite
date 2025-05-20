@@ -1,130 +1,130 @@
 #!/usr/bin/env python3
 """
-focus.py – minimal “Pomodoro + journal” tracker with tags and sound.
-Usage examples:
-  python focus.py start 50 --tag deep-work --sound-path alarm.wav
-  python focus.py log --last 5
-Requires: playsound3  (pip install playsound3)
+focus_tui.py – Textual UI for your focus timer (playsound3 alarm).
 """
+
 from __future__ import annotations
-import argparse
-import os
-import sqlite3
-import sys
-import threading
-import time
+import sqlite3, time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from playsound3 import playsound  # third-party, tiny and cross-platform
+from playsound3 import playsound            # <= plays alarm (maintained fork) :contentReference[oaicite:8]{index=8}
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, VerticalScroll
+from textual.reactive import reactive
+from textual.widgets import Static, Input, Button, DataTable
 
 DB = "focus.db"
-TABLE_SQL = """CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    start_ts REAL,
-    duration_min INTEGER,
-    note TEXT,
-    tag TEXT
-)"""
+SOUND = "alarm.wav"
+
 
 def get_db() -> sqlite3.Connection:
-    """Return sqlite connection and run one-time migrations if needed."""
     con = sqlite3.connect(DB)
-    con.execute(TABLE_SQL)
-
-    # Add tag column if an older DB exists without it (SQLite ≥3.35 has IF NOT EXISTS)
-    try:
-        con.execute("ALTER TABLE sessions ADD COLUMN tag TEXT")
-    except sqlite3.OperationalError:  # column already present
-        pass
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS sessions(
+            id INTEGER PRIMARY KEY,
+            start_ts REAL,
+            duration_min INTEGER,
+            tag TEXT,
+            note TEXT
+        )"""
+    )
     return con
 
-def play_alarm(path: str | Path) -> None:
-    """Play `path` (blocking) and fall back to terminal bell if it fails."""
-    try:
-        playsound(str(path))  # synchronous; returns after sound ends
-    except Exception as exc:  # noqa: BLE001
-        print(f"[sound-error] {exc}  – Falling back to beep.")
-        print("\a")
 
-def alert_and_record(start_ts: float, dur: int, sound_path: Path) -> None:
-    """Notify user, ask for note, persist to SQLite."""
-    play_alarm(sound_path)
-    print(f"\n⏰  {dur}-minute block finished! What did you get done?")
-    note = input("> ").strip()
+class FocusApp(App):
+    remaining: reactive[int | None] = reactive(None)
 
-    with get_db() as con:
-        con.execute(
-            "INSERT INTO sessions(start_ts, duration_min, note, tag) VALUES (?,?,?,?)",
-            (start_ts, dur, note, CURRENT_TAG.get()),
+    # ───────────────────────── compose UI ──────────────────────────
+    def compose(self) -> ComposeResult:
+        yield Static("⏱  Focus Tracker  –  Ctrl-Q to quit", id="title")
+
+        with Horizontal(id="inputs"):
+            yield Input(placeholder="Minutes", id="minutes", type="integer")
+            yield Input(placeholder="Tag optional…", id="tag")
+            yield Button("Start", id="start", variant="success")
+
+        yield Static("", id="timer")
+
+        with VerticalScroll():
+            self.table = DataTable(zebra_stripes=True)
+            self.table.add_columns("Start", "Dur", "Tag", "Note")
+            yield self.table
+
+    # ───────────────────────── helpers ────────────────────────────
+    def on_mount(self) -> None:
+        self.query_one("#minutes", Input).focus()
+        self.refresh_table()
+
+    def refresh_table(self) -> None:
+        self.table.clear()
+        with get_db() as con:
+            for ts, dur, tag, note in con.execute(
+                "SELECT start_ts,duration_min,tag,note FROM sessions "
+                "ORDER BY id DESC LIMIT 100"
+            ):
+                start = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+                self.table.add_row(start, f"{dur} m", tag or "", note)
+
+    # ───────────────────────── launch / tick ──────────────────────
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "start":
+            await self.launch_timer()
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "minutes":
+            await self.launch_timer()
+        elif event.input.id == "note_prompt":
+            await self.save_note(event)
+
+    async def launch_timer(self) -> None:
+        minutes_str = self.query_one("#minutes", Input).value
+        if not minutes_str.isdigit() or int(minutes_str) <= 0:
+            self.bell(); return
+
+        self.duration = int(minutes_str) * 60
+        self.remaining = self.duration
+        self.tag = self.query_one("#tag", Input).value.strip() or None
+        self.start_ts = time.time()
+
+        # modern timer handle
+        self.tick_timer = self.set_interval(1, self._tick, name="countdown")  # returns Timer object :contentReference[oaicite:9]{index=9}
+
+    def _tick(self) -> None:
+        if self.remaining is None:
+            return
+        self.remaining -= 1
+        mins, secs = divmod(max(self.remaining, 0), 60)
+        self.query_one("#timer", Static).update(f"[b]{mins:02d}:{secs:02d}[/b]")
+
+        if self.remaining <= 0:
+            self.tick_timer.stop()                            # stop via handle, per Timer API :contentReference[oaicite:10]{index=10}
+            playsound(SOUND)
+            self.call_after_refresh(self.collect_note)
+
+    # ───────────────────────── note collection ────────────────────
+    def collect_note(self) -> None:
+        prompt = Input(
+            placeholder="What did you get done? (Enter to save)",
+            id="note_prompt",
         )
-    print("✅  Saved. Keep it up!")
+        self.mount(prompt)
+        prompt.focus()
 
-# Simple holder for current tag (avoids global var mutation inside Timer thread)
-class _TagHolder:
-    _value: Optional[str] = None
-    def set(self, val: Optional[str]) -> None: self._value = val
-    def get(self) -> Optional[str]: return self._value
-CURRENT_TAG = _TagHolder()
+    async def save_note(self, event: Input.Submitted) -> None:
+        note = event.value.strip()
+        with get_db() as con:
+            con.execute(
+                "INSERT INTO sessions(start_ts,duration_min,tag,note) "
+                "VALUES (?,?,?,?)",
+                (self.start_ts, self.duration // 60, self.tag, note),
+            )
+        event.input.remove()
+        self.refresh_table()
+        self.remaining = None
 
-def start_session(minutes: int, tag: Optional[str], sound_path: Path) -> None:
-    CURRENT_TAG.set(tag)
-    start_ts = time.time()
-    ends = datetime.fromtimestamp(start_ts + minutes * 60).strftime("%H:%M:%S")
-    tag_info = f"[tag: {tag}]" if tag else ""
-    print(f"🚀  {minutes}-min focus started {tag_info} – ends ≈ {ends}")
+    BINDINGS = [("q", "quit", "Quit")]
 
-    timer = threading.Timer(
-        minutes * 60, alert_and_record, args=(start_ts, minutes, sound_path)
-    )
-    timer.start()
-
-    try:
-        timer.join()                 # ← keeps interpreter alive, prevents traceback
-    except KeyboardInterrupt:
-        print("\n⏹️  Session cancelled.")
-        timer.cancel()
-
-def show_log(last: int | None) -> None:
-    with get_db() as con:
-        cur = con.cursor()
-        sql = "SELECT start_ts, duration_min, tag, note FROM sessions ORDER BY id DESC"
-        if last:
-            sql += f" LIMIT {last}"
-        rows = cur.execute(sql)
-        for ts, dur, tag, note in rows:
-            dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
-            tag_txt = f"[{tag}]" if tag else ""
-            print(f"{dt} | {dur:>3} min [{tag_txt:10}] | {note}")
-
-def cli() -> None:
-    p = argparse.ArgumentParser(prog="focus")
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    ps = sub.add_parser("start", help="begin a focus session")
-    ps.add_argument("minutes", type=int, help="duration in minutes")
-    ps.add_argument("--tag", help="optional tag (e.g., deep-work, break)")
-    ps.add_argument(
-        "--sound-path",
-        default="alarm.wav",
-        help="audio file to play on finish (wav/mp3/flac…)",
-    )
-
-    plog = sub.add_parser("log", help="show past sessions")
-    plog.add_argument("--last", type=int, metavar="N", help="only last N rows")
-
-    args = p.parse_args()
-    if args.cmd == "start":
-        path = Path(args.sound_path).expanduser()
-        if not path.exists():
-            print(f"[warn] sound file {path} not found – will use terminal bell.")
-        start_session(args.minutes, args.tag, path)
-    elif args.cmd == "log":
-        show_log(args.last)
 
 if __name__ == "__main__":
-    try:
-        cli()
-    except KeyboardInterrupt:
-        sys.exit("\n⏹️  Interrupted.")
+    FocusApp().run()
