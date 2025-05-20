@@ -31,7 +31,8 @@ class FocusApp(App):
     CSS = """
     #inputs Input#minutes { width: 10; }
     #inputs Input#tag     { width: 25; }
-    #inputs Button        { width: 10; }
+    #inputs Button#start  { width: 10; }
+    #inputs Button#quit   { width: 8; }  
     #timer { height: 1; content-align: center middle; }
     """
     remaining: reactive[int | None] = reactive(None)
@@ -43,6 +44,8 @@ class FocusApp(App):
             yield Input(placeholder="Minutes", id="minutes", type="integer")   # digits-only :contentReference[oaicite:4]{index=4}
             yield Input(placeholder="Tag (optional)", id="tag")
             yield Button("Start", id="start", variant="success")               # Button.Pressed msg :contentReference[oaicite:5]{index=5}
+            yield Button("Quit", id="quit", variant="error") 
+
         yield Static("", id="timer")
         with VerticalScroll():
             self.table = DataTable(zebra_stripes=True)
@@ -72,6 +75,8 @@ class FocusApp(App):
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":
             await self._start_session()
+        elif event.button.id == "quit":
+            self.exit()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "note_prompt":
