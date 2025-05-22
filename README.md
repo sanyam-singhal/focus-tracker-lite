@@ -14,7 +14,13 @@ Focus Tracker Lite helps you implement time-boxing and focus sessions by providi
 - Set custom focus session durations
 - Add tags to categorize your focus sessions
 - Record notes about what you accomplished during each session
-- Audible alarm notification when a session ends
+- Audible alarm notification when a session ends (customizable sound)
+- Pause and resume timer functionality
+- Pomodoro mode with customizable durations and cycles
+- Customizable break timer after each session (with the ability to skip the break at any time)
+- Daily and weekly goals with progress bars and statistics
+- Edit or delete past sessions from the session history
+- View a live-updating heatmap of your focus activity for the past month
 - View history of your recent focus sessions
 - Local SQLite storage - no internet connection required
 
